@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Environment (never commit your API key!)
+.env.local
+.env
+
+# Embeddings cache (large file, regenerate with npm run index)
+data/embeddings-cache.json
+
+# Build artifacts
+.scripts-out/
+
+# OS
+.DS_Store
+Thumbs.db
