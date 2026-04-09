@@ -12,9 +12,26 @@ The player will ask you quick questions about the DM's narrative — typically a
 - If the question is about story context or a character: explain briefly based on the conversation so far.
 - If the question is about D&D rules or concepts: explain in simple terms.
 - Do NOT continue the game narrative. Do NOT write new story content.
-- Do NOT include any <feedback> XML tags.
+- Do NOT include any feedback XML tags.
 - Keep answers short — 1 to 4 sentences is ideal.`;
 }
+
+/**
+ * This string is appended to every user message so the model sees it LAST
+ * (high recency weight) and adds feedback AFTER writing the narrative.
+ * Keeping it out of the system prompt prevents the model from starting with it.
+ */
+export const FEEDBACK_INJECTION = `
+
+---
+[After your in-character DM narrative above, append a short English feedback block in Brazilian Portuguese using this exact format:]
+<feedback>
+1. ✅ O que foi bom: destaque o que o jogador escreveu bem.
+2. ✏️ Correções: aponte erros (gramática, vocabulário, tempo verbal). Mostre a versão corrigida.
+3. 💬 Mais natural: como um nativo diria a mesma coisa.
+4. 📝 Dica: uma dica rápida sobre inglês, relacionada à mensagem.
+Seja encorajador e específico. Se estiver perfeito, diga isso e dê vocabulário avançado de RPG.
+</feedback>`;
 
 interface CampaignContext {
   worldScript?: string | null;
@@ -69,9 +86,8 @@ function formatWorldScript(raw: string, isOpening: boolean): string {
       }
     }
 
-    // Opening scene only at the very start of the campaign
     if (isOpening && w.openingScene) {
-      lines.push(`\nOPENING SCENE (narrate this for the player's first message):\n${w.openingScene}`);
+      lines.push(`\nOPENING SCENE — narrate this for the player's very first message:\n${w.openingScene}`);
     }
 
     return lines.join("\n");
@@ -107,10 +123,8 @@ export function buildSystemPrompt(
   historyLength = 0
 ): string {
   const hasCampaign = !!(campaign?.worldScript);
-  const isOpening = historyLength === 0;
+  const isOpening = historyLength <= 1;
 
-  // When campaign context is loaded, skip lore RAG chunks (already in worldScript)
-  // and reduce DnD chunks to save tokens
   const dndChunks = chunks.filter((c) => !c.source.startsWith("lore")).slice(0, 2);
   const loreChunks = hasCampaign ? [] : chunks.filter((c) => c.source.startsWith("lore"));
 
@@ -123,11 +137,11 @@ export function buildSystemPrompt(
     loreChunks.length > 0
       ? loreChunks.map((c) => `[${c.source}]\n${c.text}`).join("\n\n---\n\n")
       : hasCampaign
-      ? "(Lore is embedded in the campaign plan above.)"
+      ? "(Lore is embedded in the campaign notes above.)"
       : "(No lore context retrieved.)";
 
   const campaignBlock = hasCampaign
-    ? `\n\n## DM NOTES — Campaign & World (private, never dump directly to player)\n${formatWorldScript(campaign!.worldScript!, isOpening)}`
+    ? `\n\n## DM Notes — Campaign & World (private, never dump directly to player)\n${formatWorldScript(campaign!.worldScript!, isOpening)}`
     : "";
 
   const characterBlock = campaign?.characterSheet
@@ -136,36 +150,26 @@ export function buildSystemPrompt(
 
   const openingInstruction =
     hasCampaign && isOpening
-      ? `\n\n⚠️ FIRST MESSAGE: Narrate the Opening Scene above. Do NOT ask who the player is — you already know. Address them as ${(() => { try { return JSON.parse(campaign!.characterSheet ?? "{}").name ?? "the adventurer"; } catch { return "the adventurer"; } })()} and drop them straight into the scene.`
+      ? `\n\n⚠️ OPENING: Narrate the Opening Scene from the campaign notes. Do NOT ask the player to introduce themselves — address them directly as ${(() => { try { return JSON.parse(campaign!.characterSheet ?? "{}").name ?? "the adventurer"; } catch { return "the adventurer"; } })()}.`
       : "";
 
-  return `You are an expert, immersive, and creative Dungeon Master running a D&D 5e tabletop RPG campaign.
+  return `You are an expert, immersive Dungeon Master running a D&D 5e campaign.
 
-## Your Role
-- Narrate in **second person** ("You see…", "You hear…"). Stay fully in character.
-- React to player choices with meaningful consequences.
-- For dice rolls (attack, skill check, saving throw) describe the result using the player's actual stats.
-- Write 2–4 paragraphs of narrative per response. Never list options — let the player decide freely.
-- Speak ONLY in **English** during the narrative.
-- Always call the player by their character's name.${openingInstruction}${campaignBlock}${characterBlock}
+Your response has two parts — always in this order:
+1. DM NARRATIVE: 2–4 paragraphs in English, second person, fully in character.
+2. ENGLISH FEEDBACK: in Brazilian Portuguese, inside feedback tags (instructions come at the end of the player's message).
 
-## D&D 5e Rules Reference
+Rules:
+- Never start your response with a feedback tag — narrative always comes first.
+- Narrate in second person ("You see…", "You hear…").
+- React to player choices with real consequences.
+- For dice rolls, use the player's actual stats.
+- Never list options — let the player decide freely.
+- Always address the player by their character's name.${openingInstruction}${campaignBlock}${characterBlock}
+
+## D&D 5e Rules
 ${dndContext}
 
 ## World Lore
-${loreContext}
-
----
-
-## English Feedback (MANDATORY after every response)
-Append this block in **Brazilian Portuguese** analyzing the player's last message:
-
-<feedback>
-1. **✅ O que foi bom**: destaque pontos positivos.
-2. **✏️ Correções**: erros gramaticais, vocabulário, tempo verbal — mostre a versão corrigida.
-3. **💬 Mais natural**: como um nativo falaria a mesma coisa.
-4. **📝 Dica**: dica rápida e relevante sobre inglês.
-
-Seja encorajador. Se estiver perfeito, diga e dê vocabulário avançado de RPG.
-</feedback>`;
+${loreContext}`;
 }

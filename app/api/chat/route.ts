@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getOpenRouterClient } from "@/lib/openrouter";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { retrieveContextBySource } from "@/lib/rag";
-import { buildSystemPrompt, buildTutorSystemPrompt } from "@/lib/system-prompt";
+import { buildSystemPrompt, buildTutorSystemPrompt, FEEDBACK_INJECTION } from "@/lib/system-prompt";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -46,6 +46,15 @@ export async function POST(req: NextRequest) {
       systemPrompt = buildSystemPrompt(chunks, campaign ?? undefined, userMsgCount);
     }
 
+    // Build messages for LLM — inject feedback instruction into the last user message
+    const llmMessages = (messages as { role: string; content: string }[]).map((m, i) => {
+      const isLastUser = m.role === "user" && i === messages.length - 1;
+      return {
+        role: m.role as "user" | "assistant",
+        content: isLastUser && !isTutor ? m.content + FEEDBACK_INJECTION : m.content,
+      };
+    });
+
     // Stream response from OpenRouter
     const openrouter = getOpenRouterClient();
     const stream = await openrouter.chat.completions.create({
@@ -53,10 +62,7 @@ export async function POST(req: NextRequest) {
       stream: true,
       messages: [
         { role: "system", content: systemPrompt },
-        ...messages.map((m: { role: string; content: string }) => ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        })),
+        ...llmMessages,
       ],
       temperature: 0.85,
       max_tokens: 2000,
@@ -80,6 +86,9 @@ export async function POST(req: NextRequest) {
           }
         } finally {
           controller.close();
+
+          // Debug: log first 300 chars of what the model returned
+          console.log("[chat] model response preview:", JSON.stringify(accumulated.slice(0, 300)));
 
           if (campaignId && !isTutor && lastUserMsg) {
             persistMessages(campaignId, lastUserMsg.content, accumulated, selectedModel, messages.length);
