@@ -36,14 +36,15 @@ interface CampaignContext {
   characterSheet?: string | null;
 }
 
-/** Compact summary — targets ~600 tokens max */
+/** Compact summary — targets ~800 tokens max */
 function formatWorldScript(raw: string, isOpening: boolean): string {
   try {
     const w = JSON.parse(raw);
     const lines: string[] = [];
 
-    lines.push(`CAMPAIGN: "${w.title}"`);
+    lines.push(`CAMPAIGN: "${w.title}" — ${w.tagline ?? ""}`);
     lines.push(`OBJECTIVE: ${w.mainObjective}`);
+    if (w.themes?.length) lines.push(`THEMES: ${w.themes.join(", ")}`);
 
     if (w.synopsis) {
       const short = w.synopsis.length > 300 ? w.synopsis.slice(0, 300) + "…" : w.synopsis;
@@ -54,33 +55,64 @@ function formatWorldScript(raw: string, isOpening: boolean): string {
       lines.push(`ACTS: ${w.acts.map((a: { title: string }) => a.title).join(" → ")}`);
     }
 
+    // Chronicle — the story roadmap
+    if (Array.isArray(w.chronicle) && w.chronicle.length > 0) {
+      lines.push("STORY CHRONICLE (follow this order — adapt as needed):");
+      for (const e of w.chronicle) {
+        const flag = e.isMandatory ? "★" : "◇";
+        lines.push(`  ${flag} [${e.when}] ${e.order}. ${e.title}: ${String(e.event).slice(0, 100)}`);
+      }
+    }
+
     if (Array.isArray(w.plotTwists) && w.plotTwists.length > 0) {
-      lines.push("PLOT TWISTS (SECRET — never reveal directly):");
+      lines.push("PLOT TWISTS (SECRET — foreshadow subtly, never reveal early):");
       for (const pt of w.plotTwists) {
-        lines.push(`  • [${pt.when}] ${String(pt.reveal).slice(0, 120)}`);
+        lines.push(`  • ${pt.title ?? pt.when}: ${String(pt.reveal).slice(0, 100)}`);
+      }
+    }
+
+    // Key relationships
+    if (Array.isArray(w.relationships) && w.relationships.length > 0) {
+      lines.push("KEY RELATIONSHIPS:");
+      for (const r of w.relationships) {
+        const who = Array.isArray(r.participants) ? r.participants.join(" & ") : r.between?.join(" & ") ?? "";
+        lines.push(`  • [${r.type.toUpperCase()}] ${who}: ${String(r.description).slice(0, 80)}`);
       }
     }
 
     if (Array.isArray(w.npcs) && w.npcs.length > 0) {
       lines.push("NPCs:");
       for (const npc of w.npcs) {
+        const tags = [
+          npc.canRomance ? "💛romance" : "",
+          npc.willBetray ? "🗡️betrays" : "",
+          npc.isFriend ? "🤝friend" : "",
+          npc.isEnemy ? "⚔️enemy" : "",
+        ].filter(Boolean).join(" ");
         lines.push(
-          `  • ${npc.name} (${npc.role}) | ${String(npc.personality).slice(0, 60)} | SECRET: ${String(npc.secret).slice(0, 80)}`
+          `  • ${npc.name} (${npc.role}) ${tags}| ${String(npc.personality).slice(0, 60)} | SECRET: ${String(npc.secret).slice(0, 70)}`
         );
+      }
+    }
+
+    if (Array.isArray(w.subplots) && w.subplots.length > 0) {
+      lines.push("SUB-PLOTS:");
+      for (const sp of w.subplots) {
+        lines.push(`  • ${sp.title}: ${String(sp.description).slice(0, 80)}`);
       }
     }
 
     if (Array.isArray(w.geography) && w.geography.length > 0) {
       lines.push("LOCATIONS:");
       for (const loc of w.geography) {
-        lines.push(`  • ${loc.name} (${loc.type}): ${String(loc.description).slice(0, 80)}`);
+        lines.push(`  • ${loc.name} (${loc.type}): ${String(loc.description).slice(0, 70)}`);
       }
     }
 
     if (Array.isArray(w.factions) && w.factions.length > 0) {
       lines.push("FACTIONS:");
       for (const f of w.factions) {
-        lines.push(`  • ${f.name} — ${String(f.agenda).slice(0, 80)} [Leader: ${f.leader}]`);
+        lines.push(`  • ${f.name} — ${String(f.agenda).slice(0, 70)} [Leader: ${f.leader}]`);
       }
     }
 

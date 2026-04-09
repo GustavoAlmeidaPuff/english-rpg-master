@@ -110,46 +110,152 @@ async function callLLM(
 
 function buildCampaignPrompt(loreContent: string): string {
   const loreSection = loreContent
-    ? `## World Lore\n\n${loreContent}`
-    : `## World Setting\nNo lore files found — create an original rich fantasy world.`;
+    ? `## World Lore (read carefully — every detail matters)\n\n${loreContent}`
+    : `## World Setting\nNo lore files found. Invent a rich, original fantasy world with deep history.`;
 
-  return `You are a master D&D 5e Dungeon Master and campaign designer.
+  return `You are a legendary Dungeon Master, game designer, and storyteller. Your campaigns are worthy of novels and HBO series.
 
 ${loreSection}
 
 ---
 
-Create a LONG, EPIC D&D 5e campaign plan based on the world above.
+## Your Mission
 
-Return ONLY raw JSON (no markdown, no code block):
+Design a COMPLETE, EPIC D&D 5e campaign rooted in the world lore above. This is not a generic adventure — it is a deeply personal story with real stakes, real relationships, and real consequences. Think Game of Thrones, The Witcher, and Critical Role all at once.
+
+The campaign must feel hand-crafted for THIS world. Reference specific lore details, geography, gods, factions, and history from the source material.
+
+---
+
+## What to create
+
+### Chronicle (the most important part)
+A numbered, chronological list of ALL major events in the campaign — like a book outline. Each event must specify WHAT happens, WHERE, WHO is involved, and DM NOTES for when the player goes off-script. Include mandatory events (the story needs these) and optional events (triggered by player choices). The chronicle should have 15–25 events total.
+
+### NPCs (minimum 12)
+Every NPC must feel like a real person with their own life, agenda, and arc. Beyond personality and secrets, define:
+- Their full arc: who are they at the start, how do they change, where do they end up?
+- What kind of relationship they can form with the player (friend, rival, romance, mentor, enemy, traitor)?
+- Their web of relationships with OTHER NPCs — not just the player
+- when they are involved in the campaign, what they are doing, and how they are related to the player.
+
+### Relationship Web
+The beating heart of the campaign. Define at least:
+- 2 potential ROMANCES (NPCs the player can pursue — include how they develop, what obstacles exist, what happens if the player commits or abandons them)
+- 2 BETRAYALS (NPCs who will betray the player — when, why, and how it shatters the story)
+- 1 INSEPARABLE FRIENDSHIP (an NPC who becomes the player's closest ally — their bond, what they share, what could break them apart)
+- 2 MAJOR ENEMIES (antagonists the player will face repeatedly — include their escalating conflict)
+- Other bonds: mentorships, family secrets, rivalries, complicated loyalties
+
+### Sub-plots (minimum 2)
+Side stories that run parallel to the main quest. The player can pursue or ignore them — but their consequences ripple into the main story. Examples: a rebellion brewing, a forbidden love affair between two NPCs, a cursed artifact changing the local town, a conspiracy within a trusted faction.
+
+### Plot Twists (minimum 3)
+Each twist must be genuinely surprising, earned by the story, and emotionally devastating. Not just "the villain was the ally all along" — go deeper. Include the exact moment it happens and the full emotional and strategic impact.
+
+---
+
+Return ONLY raw JSON. No markdown, no code block, no explanation. Just the JSON object.
 
 {
   "title": "string",
-  "synopsis": "string (3-4 paragraphs)",
+  "tagline": "string (one punchy sentence that captures the soul of the campaign)",
+  "themes": ["string"],
+  "synopsis": "string (4-5 paragraphs — the full arc of the story, like a back-of-book summary)",
   "mainObjective": "string",
+  "chronicle": [
+    {
+      "order": 1,
+      "title": "string",
+      "event": "string (what happens — be specific and vivid)",
+      "when": "string (early game / mid game / late game / endgame)",
+      "location": "string",
+      "npcsInvolved": ["string"],
+      "isMandatory": true,
+      "dmNotes": "string (how to run this if the player is off-script, what triggers it, alternatives)"
+    }
+  ],
   "acts": [
-    { "title": "string", "synopsis": "string", "keyScenes": ["string", "string", "string"] }
+    {
+      "title": "string",
+      "synopsis": "string",
+      "chronicleRange": "string (e.g. events 1-7)",
+      "mood": "string (tone of this act)",
+      "keyScenes": ["string"]
+    }
   ],
   "plotTwists": [
-    { "reveal": "string", "when": "string", "impact": "string" }
+    {
+      "title": "string",
+      "reveal": "string",
+      "when": "string (which chronicle event triggers this)",
+      "impact": "string (emotional + strategic consequences)",
+      "foreshadowing": "string (subtle hints the DM can drop earlier)"
+    }
   ],
   "npcs": [
-    { "name": "string", "role": "string", "appearance": "string", "personality": "string", "secret": "string", "motivation": "string", "relationToPlayer": "string" }
+    {
+      "name": "string",
+      "role": "string",
+      "appearance": "string",
+      "personality": "string",
+      "motivation": "string",
+      "secret": "string",
+      "arc": "string (how they change across the campaign)",
+      "relationToPlayer": "string (how they start out with the player)",
+      "canRomance": false,
+      "willBetray": false,
+      "isFriend": false,
+      "isEnemy": false,
+      "npcRelationships": [{"npc": "string", "nature": "string"}]
+    }
+  ],
+  "relationships": [
+    {
+      "type": "romance|betrayal|friendship|rivalry|mentorship|enmity",
+      "participants": ["string"],
+      "description": "string (how this relationship forms and evolves)",
+      "trigger": "string (what starts it — a specific moment or choice)",
+      "development": "string (how it deepens over time)",
+      "climax": "string (the defining moment of this relationship)",
+      "outcome": "string (where it ends — multiple possible endings)"
+    }
+  ],
+  "subplots": [
+    {
+      "title": "string",
+      "description": "string",
+      "npcsInvolved": ["string"],
+      "howPlayerDiscoversIt": "string",
+      "consequence_if_pursued": "string",
+      "consequence_if_ignored": "string"
+    }
   ],
   "geography": [
-    { "name": "string", "type": "string", "description": "string", "atmosphere": "string", "secrets": "string", "storyRole": "string" }
+    {
+      "name": "string",
+      "type": "string",
+      "description": "string",
+      "atmosphere": "string",
+      "secrets": "string",
+      "storyRole": "string",
+      "chronicleEvents": ["string (event titles set here)"]
+    }
   ],
   "factions": [
-    { "name": "string", "agenda": "string", "leader": "string", "relationToPlayer": "string", "internalConflict": "string" }
+    {
+      "name": "string",
+      "agenda": "string",
+      "leader": "string",
+      "internalConflict": "string",
+      "relationToPlayer": "string",
+      "canPlayerJoin": true,
+      "consequence_if_allied": "string",
+      "consequence_if_enemy": "string"
+    }
   ],
-  "openingScene": "string (vivid DM narration in second person, 3-4 paragraphs, drops the player into immediate tension or action)"
-}
-
-Requirements:
-- At least 3 acts, 6 plot twists, 10 NPCs, 7 locations, 3 factions
-- Plot twists must be surprising and earned by the story
-- NPCs must have compelling secrets and feel like real people
-- The opening scene must be immersive — no \"you wake up\" clichés`;
+  "openingScene": "string (vivid, immersive DM narration in second person — 4 paragraphs minimum, drops the player into immediate tension, references specific world details from the lore, no clichés)"
+}`;
 }
 
 function buildCharacterPrompt(loreContent: string, worldScript: string): string {
