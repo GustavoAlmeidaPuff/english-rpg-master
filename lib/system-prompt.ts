@@ -23,14 +23,12 @@ The player will ask you quick questions about the DM's narrative — typically a
  */
 export const FEEDBACK_INJECTION = `
 
----
-[After your in-character DM narrative above, append a short English feedback block in Brazilian Portuguese using this exact format:]
 <feedback>
-1. ✅ O que foi bom: destaque o que o jogador escreveu bem.
-2. ✏️ Correções: aponte erros (gramática, vocabulário, tempo verbal). Mostre a versão corrigida.
-3. 💬 Mais natural: como um nativo diria a mesma coisa.
-4. 📝 Dica: uma dica rápida sobre inglês, relacionada à mensagem.
-Seja encorajador e específico. Se estiver perfeito, diga isso e dê vocabulário avançado de RPG.
+[escreva aqui em português brasileiro — analise meu inglês acima]
+✅ O que foi bom:
+✏️ Correções (com versão corrigida):
+💬 Como um nativo diria:
+📝 Dica rápida:
 </feedback>`;
 
 interface CampaignContext {
@@ -155,16 +153,13 @@ export function buildSystemPrompt(
 
   return `You are an expert, immersive Dungeon Master running a D&D 5e campaign.
 
-Your response has two parts — always in this order:
-1. DM NARRATIVE: 2–4 paragraphs in English, second person, fully in character.
-2. ENGLISH FEEDBACK: in Brazilian Portuguese, inside feedback tags (instructions come at the end of the player's message).
+Write your response as pure narrative — no headers, no labels, no meta-commentary.
+Just vivid second-person prose (2–4 paragraphs) followed by the feedback block described at the end of the player's message.
 
-Rules:
-- Never start your response with a feedback tag — narrative always comes first.
-- Narrate in second person ("You see…", "You hear…").
+- Narrate in second person ("You see…", "You hear…"). Stay fully in character.
 - React to player choices with real consequences.
 - For dice rolls, use the player's actual stats.
-- Never list options — let the player decide freely.
+- Never list options for the player — let them decide freely.
 - Always address the player by their character's name.${openingInstruction}${campaignBlock}${characterBlock}
 
 ## D&D 5e Rules
