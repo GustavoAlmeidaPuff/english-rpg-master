@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import ChatMessage, { Message } from "@/components/ChatMessage";
 import ChatInput from "@/components/ChatInput";
+import SelectionChat from "@/components/SelectionChat";
 import { DEFAULT_MODEL } from "@/lib/models";
 
 const WELCOME_MESSAGE: Message = {
@@ -33,10 +34,10 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [loading, setLoading] = useState(false);
-  const [selectedContext, setSelectedContext] = useState<string | null>(null);
+  const [selectionPopup, setSelectionPopup] = useState<{ text: string } | null>(null);
+  const [autoSpeak, setAutoSpeak] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Scroll to bottom whenever messages change
   useEffect(() => {
@@ -44,27 +45,19 @@ export default function Home() {
   }, [messages]);
 
   const handleAskAbout = useCallback((text: string) => {
-    setSelectedContext(text);
-    // Focus the input so user can type their question
-    setTimeout(() => inputRef.current?.focus(), 50);
+    setSelectionPopup({ text });
   }, []);
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || loading) return;
 
-    // If there's a selected context, wrap the message to include it
-    const messageContent = selectedContext
-      ? `[Referring to this part of your previous response: "${selectedContext}"]\n\n${text}`
-      : text;
-
-    setSelectedContext(null);
     setInput("");
 
     const userMsg: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: messageContent,
+      content: text,
     };
 
     // Add user message and a placeholder assistant message
@@ -150,9 +143,15 @@ export default function Home() {
       abortRef.current?.abort();
       setLoading(false);
     }
+    if (typeof window !== "undefined") window.speechSynthesis?.cancel();
     setMessages([WELCOME_MESSAGE]);
     setInput("");
   }
+
+  // Build main history for the selection popup (excludes welcome + feedback sections)
+  const mainHistoryForPopup = messages
+    .filter((m) => m.id !== "welcome" && !m.streaming)
+    .map((m) => ({ role: m.role, content: m.content }));
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-b from-stone-950 via-tavern-900 to-stone-950">
@@ -169,12 +168,25 @@ export default function Home() {
             </p>
           </div>
         </div>
-        <button
-          onClick={clearChat}
-          className="text-xs text-stone-400 hover:text-stone-200 transition-colors border border-stone-600 hover:border-stone-400 rounded px-2.5 py-1"
-        >
-          New Game
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAutoSpeak((v) => !v)}
+            title={autoSpeak ? "Desativar narração automática" : "Ativar narração automática"}
+            className={`text-xs transition-colors border rounded px-2.5 py-1 ${
+              autoSpeak
+                ? "text-emerald-400 border-emerald-700 hover:border-emerald-500"
+                : "text-stone-400 border-stone-600 hover:text-stone-200 hover:border-stone-400"
+            }`}
+          >
+            {autoSpeak ? "🔊 Auto" : "🔇 Auto"}
+          </button>
+          <button
+            onClick={clearChat}
+            className="text-xs text-stone-400 hover:text-stone-200 transition-colors border border-stone-600 hover:border-stone-400 rounded px-2.5 py-1"
+          >
+            New Game
+          </button>
+        </div>
       </header>
 
       {/* Messages */}
@@ -184,6 +196,7 @@ export default function Home() {
             key={msg.id}
             message={msg}
             onAskAbout={msg.role === "assistant" ? handleAskAbout : undefined}
+            autoSpeak={msg.role === "assistant" && autoSpeak}
           />
         ))}
         <div ref={bottomRef} />
@@ -191,23 +204,6 @@ export default function Home() {
 
       {/* Input */}
       <div className="flex-shrink-0">
-        {selectedContext && (
-          <div className="px-4 pt-2 flex items-start gap-2">
-            <div className="flex-1 flex items-start gap-2 bg-amber-950/60 border border-amber-700/50 rounded-lg px-3 py-2 text-xs">
-              <span className="text-amber-400 font-semibold shrink-0 mt-0.5">❓ Perguntando sobre:</span>
-              <span className="text-amber-200/80 italic line-clamp-2 flex-1">
-                &ldquo;{selectedContext}&rdquo;
-              </span>
-              <button
-                onClick={() => setSelectedContext(null)}
-                className="shrink-0 text-amber-600 hover:text-amber-300 transition-colors ml-1 mt-0.5"
-                aria-label="Cancelar contexto"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-        )}
         <ChatInput
           value={input}
           onChange={setInput}
@@ -215,9 +211,18 @@ export default function Home() {
           disabled={loading}
           model={model}
           onModelChange={setModel}
-          inputRef={inputRef}
         />
       </div>
+
+      {/* Selection popup */}
+      {selectionPopup && (
+        <SelectionChat
+          selectedText={selectionPopup.text}
+          mainHistory={mainHistoryForPopup}
+          model={model}
+          onClose={() => setSelectionPopup(null)}
+        />
+      )}
     </div>
   );
 }

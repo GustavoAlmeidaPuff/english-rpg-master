@@ -2,33 +2,39 @@ import { NextRequest } from "next/server";
 import { getOpenRouterClient } from "@/lib/openrouter";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { retrieveContext } from "@/lib/rag";
-import { buildSystemPrompt } from "@/lib/system-prompt";
+import { buildSystemPrompt, buildTutorSystemPrompt } from "@/lib/system-prompt";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, model } = await req.json();
+    const { messages, model, mode } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
       return new Response("Invalid messages", { status: 400 });
     }
 
-    // Get the last user message for RAG retrieval
-    const lastUser = [...messages].reverse().find((m) => m.role === "user");
-    const query = lastUser?.content ?? "";
-
-    // Retrieve relevant context chunks
-    let chunks: Awaited<ReturnType<typeof retrieveContext>> = [];
-    try {
-      chunks = await retrieveContext(query, 8);
-    } catch (e) {
-      console.warn("[RAG] Retrieval failed, continuing without context:", e);
-    }
-
-    const systemPrompt = buildSystemPrompt(chunks);
+    const isTutor = mode === "tutor";
     const selectedModel = model || DEFAULT_MODEL;
+
+    let systemPrompt: string;
+    if (isTutor) {
+      systemPrompt = buildTutorSystemPrompt();
+    } else {
+      // Get the last user message for RAG retrieval
+      const lastUser = [...messages].reverse().find((m) => m.role === "user");
+      const query = lastUser?.content ?? "";
+
+      // Retrieve relevant context chunks
+      let chunks: Awaited<ReturnType<typeof retrieveContext>> = [];
+      try {
+        chunks = await retrieveContext(query, 8);
+      } catch (e) {
+        console.warn("[RAG] Retrieval failed, continuing without context:", e);
+      }
+      systemPrompt = buildSystemPrompt(chunks);
+    }
 
     // Stream response from OpenRouter
     const openrouter = getOpenRouterClient();

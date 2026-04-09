@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import EnglishFeedback from "./EnglishFeedback";
+import { useSpeech } from "@/hooks/useSpeech";
 
 export interface Message {
   id: string;
@@ -35,12 +36,14 @@ interface PopupState {
 interface ChatMessageProps {
   message: Message;
   onAskAbout?: (selectedText: string) => void;
+  autoSpeak?: boolean;
 }
 
-export default function ChatMessage({ message, onAskAbout }: ChatMessageProps) {
+export default function ChatMessage({ message, onAskAbout, autoSpeak }: ChatMessageProps) {
   const isUser = message.role === "user";
   const [popup, setPopup] = useState<PopupState | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { speak, stop, isSpeaking, isSupported } = useSpeech();
 
   const handleMouseUp = useCallback(() => {
     if (!onAskAbout || message.streaming) return;
@@ -81,6 +84,17 @@ export default function ChatMessage({ message, onAskAbout }: ChatMessageProps) {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  const { dmText: autoSpeakText } = isUser
+    ? { dmText: "" }
+    : parseAssistantContent(message.content);
+
+  useEffect(() => {
+    if (!isUser && !message.streaming && autoSpeak && autoSpeakText) {
+      speak(autoSpeakText);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message.streaming]);
 
   if (isUser) {
     return (
@@ -145,9 +159,20 @@ export default function ChatMessage({ message, onAskAbout }: ChatMessageProps) {
           🎲
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-emerald-500 font-semibold mb-1 tracking-wide uppercase">
-            Dungeon Master
-          </p>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs text-emerald-500 font-semibold tracking-wide uppercase">
+              Dungeon Master
+            </p>
+            {!message.streaming && isSupported && (
+              <button
+                onClick={() => (isSpeaking ? stop() : speak(dmText))}
+                title={isSpeaking ? "Parar" : "Ouvir"}
+                className="text-stone-400 hover:text-emerald-400 transition-colors text-base leading-none"
+              >
+                {isSpeaking ? "⏹" : "🔊"}
+              </button>
+            )}
+          </div>
           <div
             ref={containerRef}
             onMouseUp={handleMouseUp}
