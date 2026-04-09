@@ -372,6 +372,24 @@ export async function POST(
       }
 
       try {
+        // Idempotency guard: avoid regenerating if already initialized.
+        const existing = await prisma.campaign.findUnique({
+          where: { id },
+          select: {
+            initialized: true,
+            name: true,
+            worldScript: true,
+            characterSheet: true,
+          },
+        });
+
+        if (existing?.initialized && existing.worldScript && existing.characterSheet) {
+          send({ type: "log", message: "ℹ️ Campanha já inicializada — reutilizando dados existentes." });
+          send({ type: "done", campaignName: existing.name || "Nova Campanha" });
+          close();
+          return;
+        }
+
         // ── Step 1: Read lore ─────────────────────────────────────────────────
         send({ type: "log", message: "📚 Lendo arquivos de lore do mundo..." });
         const loreContent = readAllLore();
