@@ -88,24 +88,43 @@ async function callLLM(
   maxTokens: number,
   onChunk: (chunk: string) => void
 ): Promise<string> {
-  const openrouter = getOpenRouterClient();
-  const stream = await openrouter.chat.completions.create({
-    model,
-    stream: true,
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.9,
-    max_tokens: maxTokens,
-  });
+  const MAX_RETRIES = 2;
+  let attempt = 0;
+  let lastError: unknown;
 
-  let accumulated = "";
-  for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta?.content ?? "";
-    if (delta) {
-      accumulated += delta;
-      onChunk(delta);
+  while (attempt <= MAX_RETRIES) {
+    try {
+      const openrouter = getOpenRouterClient();
+      const stream = await openrouter.chat.completions.create({
+        model,
+        stream: true,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.9,
+        max_tokens: maxTokens,
+      });
+
+      let accumulated = "";
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content ?? "";
+        if (delta) {
+          accumulated += delta;
+          onChunk(delta);
+        }
+      }
+      return accumulated;
+    } catch (err) {
+      lastError = err;
+      const isLastAttempt = attempt >= MAX_RETRIES;
+      if (isLastAttempt) break;
+
+      // Backoff curto para falhas transitórias (ex: 502/network lost em stream).
+      const waitMs = 800 * (attempt + 1);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      attempt += 1;
     }
   }
-  return accumulated;
+
+  throw lastError instanceof Error ? lastError : new Error("Unknown LLM streaming error");
 }
 
 function buildCampaignPrompt(loreContent: string): string {

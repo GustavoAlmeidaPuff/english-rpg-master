@@ -1,0 +1,7 @@
+{
+  "env": {
+    "OPENROUTER_API_KEY": "k-or-v1-50f21fedbfd47d6a895c3183f5e4ede3de8207ba843a0419a0d15f1af9fbdd60"
+  },
+  "provider": "openrouter",
+  "model": "nvidia/nemotron-3-nano-30b-a3b:free"
+}

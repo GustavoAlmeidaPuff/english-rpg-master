@@ -8,6 +8,25 @@ import { prisma } from "@/lib/db";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+function shouldInjectFeedback(content: string): boolean {
+  const text = content.toLowerCase();
+
+  // Only attach correction instructions when the player explicitly asks for feedback.
+  const triggers = [
+    "feedback",
+    "correct my english",
+    "corrige meu inglês",
+    "corrigir meu inglês",
+    "corrija meu inglês",
+    "me corrige",
+    "me corrija",
+    "avaliar meu inglês",
+    "review my english",
+  ];
+
+  return triggers.some((trigger) => text.includes(trigger));
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { messages, model, mode, campaignId } = await req.json();
@@ -46,12 +65,13 @@ export async function POST(req: NextRequest) {
       systemPrompt = buildSystemPrompt(chunks, campaign ?? undefined, userMsgCount);
     }
 
-    // Build messages for LLM — inject feedback instruction into the last user message
+    // Build messages for LLM — inject feedback only when explicitly requested.
     const llmMessages = (messages as { role: string; content: string }[]).map((m, i) => {
       const isLastUser = m.role === "user" && i === messages.length - 1;
+      const wantsFeedback = isLastUser && shouldInjectFeedback(m.content);
       return {
         role: m.role as "user" | "assistant",
-        content: isLastUser && !isTutor ? m.content + FEEDBACK_INJECTION : m.content,
+        content: wantsFeedback && !isTutor ? m.content + FEEDBACK_INJECTION : m.content,
       };
     });
 
