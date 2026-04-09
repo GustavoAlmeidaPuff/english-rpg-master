@@ -2,6 +2,8 @@
 
 import { useState, useRef, useCallback } from "react";
 
+export type ModelStatus = "idle" | "loading" | "ready" | "error";
+
 function sanitize(text: string): string {
   return text
     .replace(/\*\*(.+?)\*\*/g, "$1")       // **bold**
@@ -15,21 +17,35 @@ function sanitize(text: string): string {
     .trim();
 }
 
+// Singleton — model is loaded once and shared across all hook instances
+let ttsPromise: Promise<unknown> | null = null;
+
+async function getKokoro() {
+  if (!ttsPromise) {
+    ttsPromise = (async () => {
+      const { KokoroTTS } = await import("kokoro-js");
+      return KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
+        dtype: "q8",
+        device: "wasm",
+      });
+    })();
+  }
+  return ttsPromise;
+}
+
 export function useSpeech() {
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const objectUrlRef = useRef<string | null>(null);
+  const [modelStatus, setModelStatus] = useState<ModelStatus>("idle");
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
   const stop = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = "";
-      audioRef.current = null;
+    try {
+      sourceRef.current?.stop();
+    } catch {
+      // ignore if already stopped
     }
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = null;
-    }
+    sourceRef.current = null;
     setIsSpeaking(false);
   }, []);
 
@@ -40,49 +56,60 @@ export function useSpeech() {
       const cleaned = sanitize(text);
       if (!cleaned) return;
 
+      // Load model on first use
+      if (modelStatus !== "ready") {
+        setModelStatus("loading");
+        try {
+          await getKokoro();
+          setModelStatus("ready");
+        } catch (err) {
+          console.error("Failed to load Kokoro TTS model:", err);
+          setModelStatus("error");
+          return;
+        }
+      }
+
       setIsSpeaking(true);
 
       try {
-        const res = await fetch("/api/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: cleaned }),
-        });
+        const tts = await getKokoro() as {
+          generate: (text: string, opts: { voice: string }) => Promise<{
+            audio: Float32Array;
+            sampling_rate: number;
+          }>;
+        };
 
-        if (!res.ok) {
-          console.error("TTS request failed:", res.status);
-          setIsSpeaking(false);
-          return;
+        const result = await tts.generate(cleaned, { voice: "bm_george" });
+
+        // Play via Web Audio API
+        if (!audioCtxRef.current) {
+          audioCtxRef.current = new AudioContext();
         }
+        const ctx = audioCtxRef.current;
 
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        objectUrlRef.current = url;
+        const buffer = ctx.createBuffer(
+          1,
+          result.audio.length,
+          result.sampling_rate
+        );
+        buffer.copyToChannel(result.audio, 0);
 
-        const audio = new Audio(url);
-        audioRef.current = audio;
-
-        audio.onended = () => {
-          URL.revokeObjectURL(url);
-          objectUrlRef.current = null;
-          audioRef.current = null;
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.onended = () => {
+          sourceRef.current = null;
           setIsSpeaking(false);
         };
-        audio.onerror = () => {
-          URL.revokeObjectURL(url);
-          objectUrlRef.current = null;
-          audioRef.current = null;
-          setIsSpeaking(false);
-        };
-
-        await audio.play();
+        sourceRef.current = source;
+        source.start();
       } catch (err) {
-        console.error("TTS error:", err);
+        console.error("TTS generation error:", err);
         setIsSpeaking(false);
       }
     },
-    [stop]
+    [stop, modelStatus]
   );
 
-  return { speak, stop, isSpeaking, isSupported: true };
+  return { speak, stop, isSpeaking, isSupported: true, modelStatus };
 }

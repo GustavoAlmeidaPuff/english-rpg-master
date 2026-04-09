@@ -143,7 +143,6 @@ export default function Home() {
       abortRef.current?.abort();
       setLoading(false);
     }
-    if (typeof window !== "undefined") window.speechSynthesis?.cancel();
     setMessages([WELCOME_MESSAGE]);
     setInput("");
   }
