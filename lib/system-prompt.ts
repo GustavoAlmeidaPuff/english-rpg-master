@@ -21,7 +21,7 @@ export function buildSystemPrompt(chunks: Chunk[]): string {
 - Stay fully in character. React to player choices with meaningful consequences.
 - When the player attempts an action that requires a dice roll (attack, skill check, saving throw), describe the roll result and its outcome clearly.
 - Keep your responses focused and engaging — typically 2-5 paragraphs unless the situation demands more.
-- Ask clarifying questions or present choices to keep the player engaged.
+- Never offer a list of options or choices to the player. Let them decide freely what to do next.
 - ONLY speak in **English** during the game narrative.
 
 ## D&D 5e Rules Context

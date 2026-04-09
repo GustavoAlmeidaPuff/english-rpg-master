@@ -33,24 +33,38 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [loading, setLoading] = useState(false);
+  const [selectedContext, setSelectedContext] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Scroll to bottom whenever messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const handleAskAbout = useCallback((text: string) => {
+    setSelectedContext(text);
+    // Focus the input so user can type their question
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
+
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || loading) return;
 
+    // If there's a selected context, wrap the message to include it
+    const messageContent = selectedContext
+      ? `[Referring to this part of your previous response: "${selectedContext}"]\n\n${text}`
+      : text;
+
+    setSelectedContext(null);
     setInput("");
 
     const userMsg: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: text,
+      content: messageContent,
     };
 
     // Add user message and a placeholder assistant message
@@ -166,13 +180,34 @@ export default function Home() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
         {messages.map((msg) => (
-          <ChatMessage key={msg.id} message={msg} />
+          <ChatMessage
+            key={msg.id}
+            message={msg}
+            onAskAbout={msg.role === "assistant" ? handleAskAbout : undefined}
+          />
         ))}
         <div ref={bottomRef} />
       </div>
 
       {/* Input */}
       <div className="flex-shrink-0">
+        {selectedContext && (
+          <div className="px-4 pt-2 flex items-start gap-2">
+            <div className="flex-1 flex items-start gap-2 bg-amber-950/60 border border-amber-700/50 rounded-lg px-3 py-2 text-xs">
+              <span className="text-amber-400 font-semibold shrink-0 mt-0.5">❓ Perguntando sobre:</span>
+              <span className="text-amber-200/80 italic line-clamp-2 flex-1">
+                &ldquo;{selectedContext}&rdquo;
+              </span>
+              <button
+                onClick={() => setSelectedContext(null)}
+                className="shrink-0 text-amber-600 hover:text-amber-300 transition-colors ml-1 mt-0.5"
+                aria-label="Cancelar contexto"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
         <ChatInput
           value={input}
           onChange={setInput}
@@ -180,6 +215,7 @@ export default function Home() {
           disabled={loading}
           model={model}
           onModelChange={setModel}
+          inputRef={inputRef}
         />
       </div>
     </div>

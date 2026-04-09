@@ -10,6 +10,7 @@ interface ChatInputProps {
   disabled?: boolean;
   model: string;
   onModelChange: (m: string) => void;
+  inputRef?: React.RefObject<HTMLTextAreaElement>;
 }
 
 export default function ChatInput({
@@ -19,8 +20,10 @@ export default function ChatInput({
   disabled,
   model,
   onModelChange,
+  inputRef,
 }: ChatInputProps) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const internalRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = inputRef ?? internalRef;
 
   // Auto-resize textarea
   useEffect(() => {
