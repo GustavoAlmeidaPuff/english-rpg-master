@@ -9,6 +9,7 @@ export const maxDuration = 300;
 
 const ROOT = process.cwd();
 const LORE_DIR = path.join(ROOT, "lore");
+const initializingCampaigns = new Set<string>();
 
 function collectMarkdownFiles(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
@@ -372,19 +373,51 @@ export async function POST(
   const readable = new ReadableStream({
     async start(controller) {
       function send(data: object) {
-        if (!controllerClosed) {
+        if (controllerClosed) return;
+        try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        } catch {
+          controllerClosed = true;
         }
       }
 
       function close() {
-        if (!controllerClosed) {
+        if (controllerClosed) return;
+        try {
           controllerClosed = true;
           controller.close();
+        } catch {
+          controllerClosed = true;
         }
       }
 
       try {
+        if (initializingCampaigns.has(id)) {
+          send({ type: "log", message: "⏳ Inicialização já em andamento para esta campanha..." });
+
+          const timeoutAt = Date.now() + 120_000;
+          while (Date.now() < timeoutAt) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            const current = await prisma.campaign.findUnique({
+              where: { id },
+              select: { initialized: true, name: true },
+            });
+            if (current?.initialized) {
+              send({ type: "done", campaignName: current.name || "Nova Campanha" });
+              close();
+              return;
+            }
+          }
+
+          send({
+            type: "error",
+            message: "❌ A inicialização em andamento demorou demais. Tente novamente em instantes.",
+          });
+          close();
+          return;
+        }
+        initializingCampaigns.add(id);
+
         // Idempotency guard: avoid regenerating if already initialized.
         const existing = await prisma.campaign.findUnique({
           where: { id },
@@ -521,6 +554,7 @@ export async function POST(
         console.error("[initialize]", err);
         send({ type: "error", message: `❌ Erro inesperado: ${msg}` });
       } finally {
+        initializingCampaigns.delete(id);
         close();
       }
     },
