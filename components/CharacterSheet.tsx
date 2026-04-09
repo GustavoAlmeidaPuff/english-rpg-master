@@ -74,6 +74,15 @@ const SKILL_MAP: Record<string, string> = {
   Survival: "SAB",
 };
 
+const DEFAULT_ATTRIBUTES: CharacterSheetData["attributes"] = {
+  strength: 10,
+  dexterity: 10,
+  constitution: 10,
+  intelligence: 10,
+  wisdom: 10,
+  charisma: 10,
+};
+
 function modifier(score: number): string {
   const mod = Math.floor((score - 10) / 2);
   return mod >= 0 ? `+${mod}` : `${mod}`;
@@ -115,7 +124,7 @@ function Pill({ text, highlight }: { text: string; highlight?: boolean }) {
 }
 
 export default function CharacterSheet({ data, onClose }: CharacterSheetProps) {
-  const attrs = data.attributes;
+  const attrs = { ...DEFAULT_ATTRIBUTES, ...(data.attributes ?? {}) };
   const profBonus = data.proficiencyBonus ?? 2;
 
   return (
@@ -151,7 +160,7 @@ export default function CharacterSheet({ data, onClose }: CharacterSheetProps) {
               { label: "HP", value: data.hp },
               { label: "CA", value: data.ac },
               { label: "Velocidade", value: `${data.speed}ft` },
-              { label: "Iniciativa", value: modifier(data.attributes.dexterity) },
+              { label: "Iniciativa", value: modifier(attrs.dexterity) },
               { label: "Proficiência", value: `+${profBonus}` },
             ].map((s) => (
               <div key={s.label} className="flex flex-col items-center bg-stone-900/60 border border-stone-700 rounded-lg px-3 py-1.5 min-w-[56px]">
