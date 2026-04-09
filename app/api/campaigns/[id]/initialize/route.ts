@@ -82,6 +82,19 @@ function closeJson(partial: string): string {
   return partial + closing;
 }
 
+function buildJsonRepairPrompt(raw: string): string {
+  return `You will receive a model output that should be a JSON object but may contain prose or formatting noise.
+
+Task:
+- Return ONLY one valid JSON object.
+- No markdown fences.
+- No explanations.
+- Preserve the original data as much as possible.
+
+Input:
+${raw}`;
+}
+
 async function callLLM(
   model: string,
   prompt: string,
@@ -419,9 +432,26 @@ export async function POST(
         try {
           worldScript = parseJsonSafe(campaignRaw);
         } catch (e) {
-          send({ type: "error", message: `❌ Falha ao parsear roteiro: ${e instanceof Error ? e.message : e}` });
-          close();
-          return;
+          send({ type: "log", message: "⚠️ Resposta fora de JSON. Tentando normalizar automaticamente..." });
+          try {
+            const repairedCampaignRaw = await callLLM(
+              model,
+              buildJsonRepairPrompt(campaignRaw),
+              4000,
+              () => {}
+            );
+            worldScript = parseJsonSafe(repairedCampaignRaw);
+            send({ type: "log", message: "✅ JSON do roteiro normalizado com sucesso." });
+          } catch (repairError) {
+            send({
+              type: "error",
+              message: `❌ Falha ao parsear roteiro: ${
+                repairError instanceof Error ? repairError.message : repairError
+              }`,
+            });
+            close();
+            return;
+          }
         }
 
         send({ type: "log", message: "✅ Roteiro gerado com sucesso!" });
@@ -444,9 +474,26 @@ export async function POST(
         try {
           characterSheet = parseJsonSafe(characterRaw);
         } catch (e) {
-          send({ type: "error", message: `❌ Falha ao parsear ficha: ${e instanceof Error ? e.message : e}` });
-          close();
-          return;
+          send({ type: "log", message: "⚠️ Resposta da ficha fora de JSON. Tentando normalizar..." });
+          try {
+            const repairedCharacterRaw = await callLLM(
+              model,
+              buildJsonRepairPrompt(characterRaw),
+              2500,
+              () => {}
+            );
+            characterSheet = parseJsonSafe(repairedCharacterRaw);
+            send({ type: "log", message: "✅ JSON da ficha normalizado com sucesso." });
+          } catch (repairError) {
+            send({
+              type: "error",
+              message: `❌ Falha ao parsear ficha: ${
+                repairError instanceof Error ? repairError.message : repairError
+              }`,
+            });
+            close();
+            return;
+          }
         }
 
         send({ type: "log", message: "✅ Personagem criado!" });
