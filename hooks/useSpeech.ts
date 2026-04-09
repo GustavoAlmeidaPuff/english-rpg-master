@@ -2,51 +2,37 @@
 
 import { useState, useRef, useCallback } from "react";
 
-export type ModelStatus = "idle" | "loading" | "ready" | "error";
+export type SpeechState = "idle" | "loading" | "speaking" | "error";
 
 function sanitize(text: string): string {
   return text
-    .replace(/\*\*(.+?)\*\*/g, "$1")       // **bold**
-    .replace(/\*(.+?)\*/g, "$1")            // *italic*
-    .replace(/_(.+?)_/g, "$1")              // _italic_
-    .replace(/^#{1,6}\s+/gm, "")            // # headers
-    .replace(/`{1,3}[^`]*`{1,3}/g, "")      // `code`
-    .replace(/\[.*?\]/g, "")                 // [stage directions]
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/_(.+?)_/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/`{1,3}[^`]*`{1,3}/g, "")
+    .replace(/\[.*?\]/g, "")
     .replace(/\s{2,}/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
-// Singleton — model is loaded once and shared across all hook instances
-let ttsPromise: Promise<unknown> | null = null;
-
-async function getKokoro() {
-  if (!ttsPromise) {
-    ttsPromise = (async () => {
-      const { KokoroTTS } = await import("kokoro-js");
-      return KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
-        dtype: "q8",
-        device: "wasm",
-      });
-    })();
-  }
-  return ttsPromise;
-}
-
 export function useSpeech() {
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [modelStatus, setModelStatus] = useState<ModelStatus>("idle");
-  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
+  const [state, setState] = useState<SpeechState>("idle");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
 
   const stop = useCallback(() => {
-    try {
-      sourceRef.current?.stop();
-    } catch {
-      // ignore if already stopped
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
     }
-    sourceRef.current = null;
-    setIsSpeaking(false);
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    setState("idle");
   }, []);
 
   const speak = useCallback(
@@ -56,60 +42,56 @@ export function useSpeech() {
       const cleaned = sanitize(text);
       if (!cleaned) return;
 
-      // Load model on first use
-      if (modelStatus !== "ready") {
-        setModelStatus("loading");
-        try {
-          await getKokoro();
-          setModelStatus("ready");
-        } catch (err) {
-          console.error("Failed to load Kokoro TTS model:", err);
-          setModelStatus("error");
-          return;
-        }
-      }
-
-      setIsSpeaking(true);
+      setState("loading");
 
       try {
-        const tts = await getKokoro() as {
-          generate: (text: string, opts: { voice: string }) => Promise<{
-            audio: Float32Array;
-            sampling_rate: number;
-          }>;
-        };
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: cleaned }),
+        });
 
-        const result = await tts.generate(cleaned, { voice: "bm_george" });
-
-        // Play via Web Audio API
-        if (!audioCtxRef.current) {
-          audioCtxRef.current = new AudioContext();
+        if (!res.ok) {
+          console.error("TTS request failed:", res.status);
+          setState("error");
+          return;
         }
-        const ctx = audioCtxRef.current;
 
-        const buffer = ctx.createBuffer(
-          1,
-          result.audio.length,
-          result.sampling_rate
-        );
-        buffer.copyToChannel(result.audio, 0);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        objectUrlRef.current = url;
 
-        const source = ctx.createBufferSource();
-        source.buffer = buffer;
-        source.connect(ctx.destination);
-        source.onended = () => {
-          sourceRef.current = null;
-          setIsSpeaking(false);
+        const audio = new Audio(url);
+        audioRef.current = audio;
+
+        audio.oncanplay = () => setState("speaking");
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          objectUrlRef.current = null;
+          audioRef.current = null;
+          setState("idle");
         };
-        sourceRef.current = source;
-        source.start();
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          objectUrlRef.current = null;
+          audioRef.current = null;
+          setState("error");
+        };
+
+        await audio.play();
       } catch (err) {
-        console.error("TTS generation error:", err);
-        setIsSpeaking(false);
+        console.error("TTS error:", err);
+        setState("error");
       }
     },
-    [stop, modelStatus]
+    [stop]
   );
 
-  return { speak, stop, isSpeaking, isSupported: true, modelStatus };
+  return {
+    speak,
+    stop,
+    isSpeaking: state === "speaking",
+    isLoading: state === "loading",
+    isSupported: true,
+  };
 }

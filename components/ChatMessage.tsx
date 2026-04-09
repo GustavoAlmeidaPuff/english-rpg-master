@@ -43,7 +43,7 @@ export default function ChatMessage({ message, onAskAbout, autoSpeak }: ChatMess
   const isUser = message.role === "user";
   const [popup, setPopup] = useState<PopupState | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { speak, stop, isSpeaking, isSupported, modelStatus } = useSpeech();
+  const { speak, stop, isSpeaking, isLoading, isSupported } = useSpeech();
 
   const handleMouseUp = useCallback(() => {
     if (!onAskAbout || message.streaming) return;
@@ -163,20 +163,14 @@ export default function ChatMessage({ message, onAskAbout, autoSpeak }: ChatMess
             <p className="text-xs text-emerald-500 font-semibold tracking-wide uppercase">
               Dungeon Master
             </p>
-            {!message.streaming && isSupported && modelStatus !== "error" && (
+            {!message.streaming && isSupported && (
               <button
                 onClick={() => (isSpeaking ? stop() : speak(dmText))}
-                disabled={modelStatus === "loading"}
-                title={
-                  modelStatus === "loading"
-                    ? "Carregando modelo de voz..."
-                    : isSpeaking
-                    ? "Parar"
-                    : "Ouvir"
-                }
+                disabled={isLoading}
+                title={isLoading ? "Gerando áudio..." : isSpeaking ? "Parar" : "Ouvir"}
                 className="text-stone-400 hover:text-emerald-400 transition-colors text-base leading-none disabled:opacity-50 disabled:cursor-wait"
               >
-                {modelStatus === "loading" ? "⏳" : isSpeaking ? "⏹" : "🔊"}
+                {isLoading ? "⏳" : isSpeaking ? "⏹" : "🔊"}
               </button>
             )}
           </div>
