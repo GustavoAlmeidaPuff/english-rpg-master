@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Campaign {
+  id             String    @id @default(cuid())
+  name           String    @default("Nova Campanha")
+  model          String?
+  initialized    Boolean   @default(false)
+  worldScript    String?   // JSON: campaign plan, NPCs, plot twists, geography
+  characterSheet String?   // JSON: full D&D 5e character sheet
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  messages       Message[]
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  campaignId String
+  role       String
+  content    String
+  createdAt  DateTime @default(now())
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}

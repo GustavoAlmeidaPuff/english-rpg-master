@@ -18,3 +18,5 @@ data/embeddings-cache.json
 # OS
 .DS_Store
 Thumbs.db
+
+/lib/generated/prisma

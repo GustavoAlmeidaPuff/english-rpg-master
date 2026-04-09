@@ -10,11 +10,15 @@
     "index": "ts-node --project tsconfig.scripts.json scripts/index-docs.ts"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.2",
+    "@prisma/adapter-libsql": "^7.7.0",
+    "@prisma/client": "^7.7.0",
     "ai": "^3.3.0",
     "kokoro-js": "^1.2.1",
     "msedge-tts": "^2.0.4",
     "next": "^15.3.0",
     "openai": "^4.52.0",
+    "prisma": "^7.7.0",
     "react": "^18",
     "react-dom": "^18"
   },

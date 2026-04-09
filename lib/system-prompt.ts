@@ -16,55 +16,156 @@ The player will ask you quick questions about the DM's narrative — typically a
 - Keep answers short — 1 to 4 sentences is ideal.`;
 }
 
+interface CampaignContext {
+  worldScript?: string | null;
+  characterSheet?: string | null;
+}
 
-export function buildSystemPrompt(chunks: Chunk[]): string {
-  const loreChunks = chunks.filter((c) => c.source.startsWith("lore"));
-  const dndChunks = chunks.filter((c) => !c.source.startsWith("lore"));
+/** Compact summary — targets ~600 tokens max */
+function formatWorldScript(raw: string, isOpening: boolean): string {
+  try {
+    const w = JSON.parse(raw);
+    const lines: string[] = [];
 
-  const loreContext =
-    loreChunks.length > 0
-      ? loreChunks.map((c) => `[${c.source}]\n${c.text}`).join("\n\n---\n\n")
-      : "(No specific lore context retrieved for this message.)";
+    lines.push(`CAMPAIGN: "${w.title}"`);
+    lines.push(`OBJECTIVE: ${w.mainObjective}`);
+
+    if (w.synopsis) {
+      const short = w.synopsis.length > 300 ? w.synopsis.slice(0, 300) + "…" : w.synopsis;
+      lines.push(`SYNOPSIS: ${short}`);
+    }
+
+    if (Array.isArray(w.acts) && w.acts.length > 0) {
+      lines.push(`ACTS: ${w.acts.map((a: { title: string }) => a.title).join(" → ")}`);
+    }
+
+    if (Array.isArray(w.plotTwists) && w.plotTwists.length > 0) {
+      lines.push("PLOT TWISTS (SECRET — never reveal directly):");
+      for (const pt of w.plotTwists) {
+        lines.push(`  • [${pt.when}] ${String(pt.reveal).slice(0, 120)}`);
+      }
+    }
+
+    if (Array.isArray(w.npcs) && w.npcs.length > 0) {
+      lines.push("NPCs:");
+      for (const npc of w.npcs) {
+        lines.push(
+          `  • ${npc.name} (${npc.role}) | ${String(npc.personality).slice(0, 60)} | SECRET: ${String(npc.secret).slice(0, 80)}`
+        );
+      }
+    }
+
+    if (Array.isArray(w.geography) && w.geography.length > 0) {
+      lines.push("LOCATIONS:");
+      for (const loc of w.geography) {
+        lines.push(`  • ${loc.name} (${loc.type}): ${String(loc.description).slice(0, 80)}`);
+      }
+    }
+
+    if (Array.isArray(w.factions) && w.factions.length > 0) {
+      lines.push("FACTIONS:");
+      for (const f of w.factions) {
+        lines.push(`  • ${f.name} — ${String(f.agenda).slice(0, 80)} [Leader: ${f.leader}]`);
+      }
+    }
+
+    // Opening scene only at the very start of the campaign
+    if (isOpening && w.openingScene) {
+      lines.push(`\nOPENING SCENE (narrate this for the player's first message):\n${w.openingScene}`);
+    }
+
+    return lines.join("\n");
+  } catch {
+    return raw.slice(0, 800);
+  }
+}
+
+/** Compact character block — ~200 tokens */
+function formatCharacterSheet(raw: string): string {
+  try {
+    const c = JSON.parse(raw);
+    const a = c.attributes ?? {};
+    function mod(s: number) {
+      const m = Math.floor((s - 10) / 2);
+      return m >= 0 ? `+${m}` : `${m}`;
+    }
+    return `PLAYER CHARACTER: ${c.name} | ${[c.subrace, c.race].filter(Boolean).join(" ")} ${[c.class, c.subclass].filter(Boolean).join("/")} Lv${c.level} | ${c.background} | ${c.alignment}
+STATS: STR${a.strength}(${mod(a.strength)}) DEX${a.dexterity}(${mod(a.dexterity)}) CON${a.constitution}(${mod(a.constitution)}) INT${a.intelligence}(${mod(a.intelligence)}) WIS${a.wisdom}(${mod(a.wisdom)}) CHA${a.charisma}(${mod(a.charisma)})
+HP:${c.hp} AC:${c.ac} Speed:${c.speed}ft Prof:+${c.proficiencyBonus}
+SAVES: ${(c.savingThrowProficiencies ?? []).join(", ")}
+SKILLS: ${(c.skillProficiencies ?? []).join(", ")}
+GEAR: ${(c.equipment ?? []).join(", ")}
+PERSONALITY: ${c.personality} | IDEALS: ${c.ideals} | BONDS: ${c.bonds} | FLAWS: ${c.flaws}`;
+  } catch {
+    return raw.slice(0, 400);
+  }
+}
+
+export function buildSystemPrompt(
+  chunks: Chunk[],
+  campaign?: CampaignContext,
+  historyLength = 0
+): string {
+  const hasCampaign = !!(campaign?.worldScript);
+  const isOpening = historyLength === 0;
+
+  // When campaign context is loaded, skip lore RAG chunks (already in worldScript)
+  // and reduce DnD chunks to save tokens
+  const dndChunks = chunks.filter((c) => !c.source.startsWith("lore")).slice(0, 2);
+  const loreChunks = hasCampaign ? [] : chunks.filter((c) => c.source.startsWith("lore"));
 
   const dndContext =
     dndChunks.length > 0
       ? dndChunks.map((c) => `[${c.source}]\n${c.text}`).join("\n\n---\n\n")
-      : "(No specific D&D rules context retrieved for this message.)";
+      : "(No D&D rules context retrieved.)";
+
+  const loreContext =
+    loreChunks.length > 0
+      ? loreChunks.map((c) => `[${c.source}]\n${c.text}`).join("\n\n---\n\n")
+      : hasCampaign
+      ? "(Lore is embedded in the campaign plan above.)"
+      : "(No lore context retrieved.)";
+
+  const campaignBlock = hasCampaign
+    ? `\n\n## DM NOTES — Campaign & World (private, never dump directly to player)\n${formatWorldScript(campaign!.worldScript!, isOpening)}`
+    : "";
+
+  const characterBlock = campaign?.characterSheet
+    ? `\n\n## Player Character\n${formatCharacterSheet(campaign.characterSheet)}`
+    : "";
+
+  const openingInstruction =
+    hasCampaign && isOpening
+      ? `\n\n⚠️ FIRST MESSAGE: Narrate the Opening Scene above. Do NOT ask who the player is — you already know. Address them as ${(() => { try { return JSON.parse(campaign!.characterSheet ?? "{}").name ?? "the adventurer"; } catch { return "the adventurer"; } })()} and drop them straight into the scene.`
+      : "";
 
   return `You are an expert, immersive, and creative Dungeon Master running a D&D 5e tabletop RPG campaign.
 
-## Your Role as DM
-- Narrate the world vividly in the **second person** ("You see...", "You hear...").
-- Stay fully in character. React to player choices with meaningful consequences.
-- When the player attempts an action that requires a dice roll (attack, skill check, saving throw), describe the roll result and its outcome clearly.
-- Keep your responses focused and engaging — typically 2-5 paragraphs unless the situation demands more.
-- Never offer a list of options or choices to the player. Let them decide freely what to do next.
-- ONLY speak in **English** during the game narrative.
+## Your Role
+- Narrate in **second person** ("You see…", "You hear…"). Stay fully in character.
+- React to player choices with meaningful consequences.
+- For dice rolls (attack, skill check, saving throw) describe the result using the player's actual stats.
+- Write 2–4 paragraphs of narrative per response. Never list options — let the player decide freely.
+- Speak ONLY in **English** during the narrative.
+- Always call the player by their character's name.${openingInstruction}${campaignBlock}${characterBlock}
 
-## D&D 5e Rules Context
-Use the following reference material to adjudicate rules accurately:
-
+## D&D 5e Rules Reference
 ${dndContext}
 
-## World Lore Context
-The campaign is set in the world described by the following lore. Use it as your primary source of truth for setting details, NPCs, factions, locations, and history:
-
+## World Lore
 ${loreContext}
 
 ---
 
-## English Feedback (MANDATORY — always include this)
-After EVERY response, you MUST append a feedback section in **Brazilian Portuguese** that comments on the player's most recent message in English. Use this exact XML tag:
+## English Feedback (MANDATORY after every response)
+Append this block in **Brazilian Portuguese** analyzing the player's last message:
 
 <feedback>
-[Escreva aqui em português brasileiro]
+1. **✅ O que foi bom**: destaque pontos positivos.
+2. **✏️ Correções**: erros gramaticais, vocabulário, tempo verbal — mostre a versão corrigida.
+3. **💬 Mais natural**: como um nativo falaria a mesma coisa.
+4. **📝 Dica**: dica rápida e relevante sobre inglês.
 
-Analise a mensagem do jogador em inglês e:
-1. **✅ O que foi bom**: destaque pontos positivos da escrita.
-2. **✏️ Correções**: aponte erros gramaticais, de vocabulário, tempo verbal, artigos, preposições, etc. Mostre a versão corrigida.
-3. **💬 Expressões mais naturais**: sugira como um nativo falaria a mesma coisa de forma mais fluida ou idiomática.
-4. **📝 Dica do momento**: dê uma dica rápida sobre algum aspecto do inglês relevante à mensagem (ex: uso de "would", diferença entre "bring/take", phrasal verbs, etc.).
-
-Seja encorajador, específico e didático. Se a mensagem estiver perfeita, diga isso e dê uma dica de vocabulário avançado relacionado ao RPG.
+Seja encorajador. Se estiver perfeito, diga e dê vocabulário avançado de RPG.
 </feedback>`;
 }

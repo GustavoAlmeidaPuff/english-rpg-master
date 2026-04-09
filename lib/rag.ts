@@ -131,6 +131,36 @@ function loadIndex(): Chunk[] {
 }
 
 /**
+ * Retrieve the top-K most relevant chunks for a given query,
+ * optionally filtered by source prefix.
+ */
+export async function retrieveContextBySource(
+  query: string,
+  sourcePrefix: string,
+  topK: number,
+  queryEmbedding?: number[]
+): Promise<Chunk[]> {
+  const index = loadIndex();
+  const filtered = index.filter(
+    (c) => c.embedding && c.source.startsWith(sourcePrefix)
+  );
+  if (filtered.length === 0) return [];
+
+  const [embedding] = queryEmbedding
+    ? [queryEmbedding]
+    : await embedBatch([query]);
+
+  return filtered
+    .map((c) => ({
+      chunk: c,
+      score: cosineSimilarity(embedding, c.embedding!),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK)
+    .map((s) => s.chunk);
+}
+
+/**
  * Retrieve the top-K most relevant chunks for a given query.
  */
 export async function retrieveContext(

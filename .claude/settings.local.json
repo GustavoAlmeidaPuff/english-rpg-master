@@ -8,7 +8,10 @@
       "WebFetch(domain:github.com)",
       "WebSearch",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:mfyz.com)"
+      "WebFetch(domain:mfyz.com)",
+      "Bash(npx prisma:*)",
+      "Bash(node -e \"const a = require\\('@prisma/adapter-libsql'\\); console.log\\(Object.keys\\(a\\)\\)\")",
+      "Bash(node -e \"const {PrismaLibSql} = require\\('@prisma/adapter-libsql'\\); const f = PrismaLibSql.toString\\(\\).slice\\(0,200\\); console.log\\(f\\)\")"
     ]
   }
 }
