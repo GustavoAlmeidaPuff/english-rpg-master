@@ -27,7 +27,6 @@ export default function InitializationScreen({
   const [error, setError] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const thinkingEndRef = useRef<HTMLDivElement>(null);
-  const startedRequestRef = useRef<string | null>(null);
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -38,10 +37,6 @@ export default function InitializationScreen({
   }, [thinkingText]);
 
   useEffect(() => {
-    const requestKey = `${campaignId}:${model}`;
-    if (startedRequestRef.current === requestKey) return;
-    startedRequestRef.current = requestKey;
-
     let aborted = false;
 
     async function run() {
